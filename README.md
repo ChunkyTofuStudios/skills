@@ -65,6 +65,10 @@ The first command registers this repo as a marketplace named `chunkytofustudios`
 
 If you'd rather not depend on `npx skills` or the plugin marketplace, every skill in this repo is a self-contained directory under `skills/` — copy or symlink one into your agent's skills directory (`.claude/skills/`, `.agents/skills/`, `.cursor/skills/`, …) and it will be picked up.
 
+## Roadmap
+
+- **Evals.** Skills in this repo don't yet ship with regression evals. Adding [trigger and behavior evals](https://agentskills.io/skill-creation/evaluating-skills) per skill is planned — contributions welcome.
+
 ## Contributing
 
 We welcome new skills and improvements. See [AGENTS.md](AGENTS.md) for the contributor guide — directory layout, frontmatter rules, scripting conventions, and where to learn more about writing good skills.
