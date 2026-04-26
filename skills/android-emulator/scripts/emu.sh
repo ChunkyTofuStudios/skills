@@ -404,8 +404,10 @@ PY
   log)
     # log [-f] [N]  — tail last N lines (default 50). With -f, follow the file
     # like `tail -f`. Pipe through grep to filter by severity, e.g.
-    # `scripts/emu.sh log 500 | grep -E '^\[(W|S)\]'` for warnings + severe
-    # when the app uses package:logging with [F]/[I]/[W]/[S] prefixes.
+    # `scripts/emu.sh log 500 | grep -E 'I/flutter.*\[(W|S)\]'` for warnings +
+    # severe when the app uses package:logging with [F]/[I]/[W]/[S] prefixes.
+    # The `I/flutter.*` prefix is needed because logcat wraps every print()
+    # line with `I/flutter ( PID): ` before the user's tag.
     follow=0
     if [ "${1:-}" = "-f" ]; then follow=1; shift; fi
     n="${1:-50}"
@@ -506,7 +508,8 @@ App control:
   wait-run                   block until `flutter run` attaches or errors (180s timeout)
   kill-run                   kill the flutter daemon (via pidfile) + force-stop app
   log [-f] [N]               tail last N lines of the per-invocation log (default 50). With -f, follow.
-                             Filter by severity via grep, e.g. `log 500 | grep -E '^\[(W|S)\]'`.
+                             Filter by severity via grep, e.g. `log 500 | grep -E 'I/flutter.*\[(W|S)\]'`
+                             (the I/flutter prefix is logcat's wrapper around every print() line).
 
 Input (all coords in SCREENSHOT pixels — 360-wide space):
   screenshot                 capture screen → /tmp/android-emu-shot-<id>.jpg (360px wide JPEG q85).
