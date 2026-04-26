@@ -21,6 +21,20 @@
       "author": {
         "name": "Chunky Tofu Studios"
       }
+    },
+    {
+      "name": "design-polish",
+      "description": "Polish Flutter app UI screens for visual hierarchy, readability, and section clarity. First reads a representative reference screen (the home page or a polished page the user points at) to lock in the app's existing design tone, then drives the running app on the Android emulator via the `android-emulator` skill — screenshots, taps, swipes — to observe each target screen, makes targeted widget and `ThemeData` changes, and spawns an independent evaluator sub-agent to score the result on design quality, originality, craft, and functionality. Use this skill whenever the user wants to improve, polish, refine, critique, audit, or tighten the visual design of a Flutter screen — even when they don't say \"polish\" explicitly (e.g. \"make this look better\", \"fix the layout on settings\", \"tighten up the home screen\", \"this screen feels off\"). Stops and asks for a reference screen if the app's design tone can't be established with confidence.",
+      "source": "./",
+      "skills": ["./skills/design-polish"],
+      "license": "MIT",
+      "homepage": "https://github.com/chunkytofustudios/skills",
+      "repository": "https://github.com/chunkytofustudios/skills",
+      "category": "development",
+      "keywords": ["flutter", "design", "ui", "polish", "visual", "hierarchy"],
+      "author": {
+        "name": "Chunky Tofu Studios"
+      }
     }
   ]
 }
