@@ -25,19 +25,19 @@ Use [skills.sh](https://skills.sh) — the open agent-skills package manager —
 npx skills add chunkytofustudios/skills
 
 # Or just one skill
-npx skills add chunkytofustudios/skills -s android-emulator
+npx skills add chunkytofustudios/skills --skill android-emulator
 ```
 
 `npx skills` auto-detects the agents you have set up (Claude Code, Cursor, GitHub Copilot in VS Code, OpenAI Codex, Cline, Windsurf, and 40+ others) and writes the skill into the right place — e.g. `.claude/skills/android-emulator/` for Claude Code or `.agents/skills/android-emulator/` for VS Code. Pin a target with `-a`:
 
 ```bash
-npx skills add chunkytofustudios/skills -a claude-code
+npx skills add chunkytofustudios/skills --agent claude-code
 ```
 
 Install globally for all your projects with `-g`:
 
 ```bash
-npx skills add chunkytofustudios/skills -g
+npx skills add chunkytofustudios/skills --global
 ```
 
 Other useful commands:
