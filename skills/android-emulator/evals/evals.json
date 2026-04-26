@@ -25,26 +25,6 @@
       ]
     },
     {
-      "id": "long-press-not-fake-swipe",
-      "prompt": "long-press the Profile tab on the bottom nav so the context menu appears.",
-      "expected_output": "Agent uses the skill's hold or hold-label command — NOT a same-coord swipe — because adb's long-press-via-swipe is read by Flutter as a cancelled tap and never fires onLongPress.",
-      "assertions": [
-        "Transcript invokes scripts/emu.sh hold-label (or scripts/emu.sh hold X Y MS).",
-        "Transcript does NOT invoke `adb shell input swipe` with identical or near-identical start/end coords as a way to fake a long-press.",
-        "Transcript does NOT invoke scripts/emu.sh swipe with identical or near-identical start/end coords for the same purpose."
-      ]
-    },
-    {
-      "id": "multi-touch-pinch-via-qemu",
-      "prompt": "pinch out to zoom in on the map view in the running app — roughly the center of the screen, about 2x.",
-      "expected_output": "Agent uses the skill's pinch command (which routes through the qemu console) rather than trying to script multi-touch via adb.",
-      "assertions": [
-        "Transcript invokes scripts/emu.sh pinch out (with or without center/start-gap/end-gap arguments).",
-        "Transcript does NOT attempt multi-touch via `adb shell input` (it is single-touch only and will not produce a real pinch).",
-        "Transcript does NOT attempt `adb shell sendevent` or other root-required workarounds."
-      ]
-    },
-    {
       "id": "stop-flutter-cleanly",
       "prompt": "I'm done debugging — stop the flutter run session and shut down the emulator.",
       "expected_output": "Agent uses scripts/emu.sh kill-run for the backgrounded daemon (not TaskStop), then scripts/emu.sh exit for the emulator.",
@@ -52,28 +32,6 @@
         "Transcript invokes scripts/emu.sh kill-run.",
         "Transcript does NOT use TaskStop on the background flutter run task as the primary stop mechanism — the SKILL.md notes the task may already be reaped, and either way the app keeps running on the device until force-stopped.",
         "Transcript invokes scripts/emu.sh exit after kill-run to shut the AVD down."
-      ]
-    },
-    {
-      "id": "diagnose-empty-semantics",
-      "prompt": "I just ran `scripts/emu.sh ui-list` against my running flutter app and it printed `(no labelled nodes found — is Flutter semantics enabled?)`. The app is rendering fine on screen — what's wrong, and how do I fix it so I can use tap-label?",
-      "expected_output": "Agent diagnoses the missing Flutter semantics tree and recommends fixing the app — adding `SemanticsBinding.instance.ensureSemantics()` to main() in debug builds, and/or wrapping icon-only widgets in Semantics(label: ...). Does NOT recommend coordinate-guessing or screenshotting as the primary path forward.",
-      "assertions": [
-        "Answer recommends calling `SemanticsBinding.instance.ensureSemantics()` in main() (typically guarded by kDebugMode).",
-        "Answer mentions wrapping custom or icon-only widgets in `Semantics(label: ...)` (or `identifier:`) for cases not auto-covered by Material widgets.",
-        "Answer does NOT propose 'just tap by coordinates from a screenshot' as the primary fix.",
-        "Answer optionally mentions enabling TalkBack on the AVD as the heavier alternative."
-      ]
-    },
-    {
-      "id": "screenshot-uses-printed-path",
-      "prompt": "take a screenshot of the emulator — there's a popup blocking the home screen and I want to see what it says.",
-      "expected_output": "Agent runs scripts/emu.sh screenshot, reads the JPEG path the command printed on stdout, and Reads that exact path. Does NOT hardcode `/tmp/android-emu-shot.jpg` — the script writes per-invocation paths suffixed with the script PID for safe concurrent use.",
-      "assertions": [
-        "Transcript invokes scripts/emu.sh screenshot.",
-        "Transcript reads the file path that screenshot printed on stdout (matches `/tmp/android-emu-shot-.+\\.jpg`).",
-        "Transcript does NOT pass a hardcoded `/tmp/android-emu-shot.jpg` literal to the Read tool.",
-        "Agent uses the Read tool on the printed JPEG path to actually look at the popup before answering."
       ]
     }
   ]

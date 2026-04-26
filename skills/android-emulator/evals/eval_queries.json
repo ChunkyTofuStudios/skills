@@ -1,0 +1,34 @@
+[
+  {
+    "query": "see what the home screen looks like for me — i just changed the hero card",
+    "should_trigger": true
+  },
+  {
+    "query": "after the latest commit my pixel build feels off, check the layout",
+    "should_trigger": true
+  },
+  {
+    "query": "can you smoke-test the login flow on the app and tell me what breaks",
+    "should_trigger": true
+  },
+  {
+    "query": "tap the search tab and tell me if the keyboard pops up — i think it's broken on android",
+    "should_trigger": true
+  },
+  {
+    "query": "what's the difference between StreamBuilder and FutureBuilder in flutter?",
+    "should_trigger": false
+  },
+  {
+    "query": "my flutter app crashes on iOS when I open the camera — here's the stack trace, can you find the bug?",
+    "should_trigger": false
+  },
+  {
+    "query": "how do I migrate my flutter app from Material 2 to Material 3?",
+    "should_trigger": false
+  },
+  {
+    "query": "how do I sideload an APK onto my physical pixel phone for QA?",
+    "should_trigger": false
+  }
+]
