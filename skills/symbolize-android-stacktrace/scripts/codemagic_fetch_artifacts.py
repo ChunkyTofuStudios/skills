@@ -20,9 +20,10 @@ Examples:
 Selectors:
   --app <value>     App name (case-insensitive exact match against appName)
                     *or* Android applicationId / iOS bundleId (e.g.
-                    "com.chunkytofustudios.beehive"). The applicationId is
-                    resolved once from each app's GitHub repo
-                    (android/app/build.gradle{,.kts}) and cached.
+                    "com.chunkytofustudios.beehive"). applicationId lookup
+                    is lazy — it's only triggered when the selector doesn't
+                    match a display name and the cache doesn't already know
+                    the package. Resolved values are cached per-app.
   --build <version> Build version string, e.g. "2.3.1" (leading "v" tolerated).
                     When multiple finished Android builds share a version,
                     the most recent one is selected.
@@ -32,9 +33,14 @@ Output (stdout):
   --app:                  {"app": {...}, "builds": [{"buildId","version", ...}]}
   --app --build:          {"app": {...}, "build": {...}, "files": [...]}
 
+  In list-apps mode, `package` is whatever's in the cache — typically null on
+  first run. Pass `--app <appName>` (or `--app <applicationId>` once gh is
+  authenticated) to trigger resolution for the apps it actually visits.
+
 Caches:
   ~/.cache/codemagic-fetch-artifacts/codemagic-apps.json
-      appId -> {appName, package, repo}  (package resolved via `gh api`)
+      appId -> {appName, package, repo}  (package resolved via `gh api`,
+      lazily — only entries whose package was actually requested are filled)
   ~/.cache/codemagic-fetch-artifacts/codemagic/<appId>/<buildId>/
       Downloaded zip artifacts (cache hits verified by size match).
 
@@ -212,40 +218,30 @@ def _save_app_cache(data: dict) -> None:
     APPS_CACHE_PATH.write_text(json.dumps(data, indent=2, sort_keys=True))
 
 
-def enrich_apps(apps: list[dict]) -> dict[str, dict]:
-    """Return appId -> {appName, package, repo}. Caches package on disk.
+def _resolve_one_lazily(cache: dict, app: dict) -> str | None:
+    """Resolve and cache one app's applicationId. Idempotent.
 
-    `package` requires `gh` to be on PATH and authenticated. Without it,
-    every entry's `package` is None and apps must be selected by display
-    name. The skill-level docs cover the trade-off.
+    Returns the package (or None — meaning gh missing, repo unparseable,
+    or no `applicationId` in the gradle file). The result, including
+    None, is cached so we never shell out to gh twice for the same app.
     """
-    cache = _load_app_cache()
-    if not _gh_available():
-        warn("`gh` not on PATH — `--app <applicationId>` disabled; select apps by display name.")
-    dirty = False
-    for app in apps:
-        app_id = app["_id"]
-        repo = (app.get("repository") or {}).get("htmlUrl")
-        entry = cache.get(app_id) or {}
-        # Re-resolve if the cached appName drifted or the repo changed.
-        stale = (
-            entry.get("appName") != app.get("appName")
-            or entry.get("repo") != repo
-            or "package" not in entry
-        )
-        if stale:
-            if _gh_available():
-                info(f"Resolving applicationId for {app.get('appName')} ...")
-            entry = {
-                "appName": app.get("appName"),
-                "repo": repo,
-                "package": _resolve_application_id(repo),
-            }
-            cache[app_id] = entry
-            dirty = True
-    if dirty:
-        _save_app_cache(cache)
-    return cache
+    app_id = app["_id"]
+    if app_id in cache and "package" in cache[app_id]:
+        return cache[app_id]["package"]
+
+    repo = (app.get("repository") or {}).get("htmlUrl")
+    if _gh_available():
+        info(f"Resolving applicationId for {app.get('appName')} ...")
+        package = _resolve_application_id(repo)
+    else:
+        package = None
+
+    cache[app_id] = {
+        "appName": app.get("appName"),
+        "repo": repo,
+        "package": package,
+    }
+    return package
 
 
 # ---------------------------------------------------------------------------
@@ -273,8 +269,8 @@ def _build_summary(b: dict) -> dict:
     }
 
 
-def find_app(apps: list[dict], cache: dict[str, dict], selector: str) -> dict:
-    """Match by appName (case-insensitive exact) OR applicationId (exact)."""
+def _match_in_cache(apps: list[dict], cache: dict[str, dict], selector: str) -> list[dict]:
+    """Cache-only lookup. Returns 0..N matching apps. No network."""
     needle = selector.lower()
     matches = []
     for a in apps:
@@ -282,8 +278,19 @@ def find_app(apps: list[dict], cache: dict[str, dict], selector: str) -> dict:
             matches.append(a)
             continue
         package = (cache.get(a["_id"], {}).get("package") or "")
-        if package == selector or package.lower() == needle:
+        if package and (package == selector or package.lower() == needle):
             matches.append(a)
+    return matches
+
+
+def find_app(apps: list[dict], cache: dict[str, dict], selector: str) -> dict:
+    """Match by appName (case-insensitive exact) OR applicationId (exact).
+
+    Cache-only — does not shell out to gh. Use `find_app_lazy` to also
+    permit on-demand applicationId resolution for entries the cache hasn't
+    seen yet.
+    """
+    matches = _match_in_cache(apps, cache, selector)
     if not matches:
         known = ", ".join(
             f"{a.get('appName')!r} ({cache.get(a['_id'], {}).get('package') or '?'})"
@@ -293,6 +300,51 @@ def find_app(apps: list[dict], cache: dict[str, dict], selector: str) -> dict:
     if len(matches) > 1:
         die(f"Multiple apps matched {selector!r}: {[a.get('appName') for a in matches]}")
     return matches[0]
+
+
+def find_app_lazy(apps: list[dict], cache: dict[str, dict], selector: str) -> dict:
+    """Like `find_app`, but resolves applicationId on demand for cache misses.
+
+    Strategy:
+      1. Match by display name (free).
+      2. Match by already-cached applicationId (free).
+      3. Only if 1 + 2 miss: resolve unresolved apps one at a time via `gh`,
+         stopping the moment we get a hit. Persist each new entry as we go.
+
+    Most invocations stop at step 1, so on a clean cache the only `gh` calls
+    happen when the user passed an applicationId we haven't resolved yet.
+    """
+    matches = _match_in_cache(apps, cache, selector)
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        die(f"Multiple apps matched {selector!r}: {[a.get('appName') for a in matches]}")
+
+    needle = selector.lower()
+    if not _gh_available():
+        die(
+            f"No app matched {selector!r} by display name, and `gh` is not on "
+            f"PATH so applicationId lookup is unavailable. Either install gh "
+            f"and `gh auth login`, or select the app by its Codemagic display "
+            f"name (run with no flags to list display names)."
+        )
+
+    dirty = False
+    for app in apps:
+        if app["_id"] in cache and "package" in cache[app["_id"]]:
+            continue  # already attempted; skip to avoid re-shelling out
+        pkg = _resolve_one_lazily(cache, app)
+        dirty = True
+        if pkg and (pkg == selector or pkg.lower() == needle):
+            _save_app_cache(cache)
+            return app
+
+    if dirty:
+        _save_app_cache(cache)
+
+    # No match after exhausting unresolved entries. `find_app` will produce
+    # the diagnostic with the now-fully-populated cache.
+    return find_app(apps, cache, selector)
 
 
 def find_build(builds: list[dict], version: str) -> dict:
@@ -354,15 +406,15 @@ def select_artifacts(build: dict) -> list[dict]:
 
 def mode_list_apps() -> None:
     apps = list_apps()
-    cache = enrich_apps(apps)
+    cache = _load_app_cache()
     info(f"Found {len(apps)} app(s).")
     emit({"apps": [_app_summary(a, cache) for a in apps]})
 
 
 def mode_list_builds(app_selector: str) -> None:
     apps = list_apps()
-    cache = enrich_apps(apps)
-    app = find_app(apps, cache, app_selector)
+    cache = _load_app_cache()
+    app = find_app_lazy(apps, cache, app_selector)
     info(f"Listing finished Android builds for {app['appName']} ({app['_id']}) ...")
     builds = list_android_builds(app["_id"])
     info(f"Found {len(builds)} finished Android build(s).")
@@ -374,8 +426,8 @@ def mode_list_builds(app_selector: str) -> None:
 
 def mode_download(app_selector: str, build_selector: str) -> None:
     apps = list_apps()
-    cache = enrich_apps(apps)
-    app = find_app(apps, cache, app_selector)
+    cache = _load_app_cache()
+    app = find_app_lazy(apps, cache, app_selector)
     builds = list_android_builds(app["_id"])
     build = find_build(builds, build_selector)
 

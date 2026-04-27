@@ -58,9 +58,12 @@ The trace usually contains the package name embedded in `/data/app/.../<applicat
 For the version, prefer (in order):
 1. A `# Version:` header line in the trace (Crashlytics-style export).
 2. The version the user stated when sharing the trace.
-3. The version shown next to the crash in Play Console — ask the user if missing.
-
-Don't guess. Symbol files only resolve if their Build IDs match the crashing build exactly.
+3. **If still unknown, stop and ask.** The user is downloading the trace from
+   the Google Play Console and can read the `versionName` straight off the
+   crash detail page next to the trace they sent you. Do **not** guess from the
+   most recent Codemagic build — Symbol Build IDs only resolve when the version
+   matches the crashing build exactly, and a mismatch silently produces
+   `[UNRESOLVED: no symbol file for BuildId …]` for every app frame.
 
 ### 3. Fetch symbols from Codemagic
 
@@ -126,9 +129,10 @@ Frames the script couldn't resolve get `[UNRESOLVED]`. The summary at the end re
 - **The version string must match the Codemagic build's `version` field exactly.** Codemagic stores e.g. `"2.3.1"`; a `v` prefix is tolerated, but appending the build number (`2.3.1+42`) is not. If unsure, run `codemagic_fetch_artifacts.py --app …` (no `--build`) to see the available versions.
 - **ABI is detected from the trace by greps** for `arm64`, `armeabi`, `x86_64`, `x86`. The 99% case is `arm64-v8a`. If the trace genuinely lacks an ABI hint, the script defaults to `arm64-v8a`.
 - **The Flutter symbols zip is named `<AppName>_<N>_artifacts.zip`** where `<N>` is the Codemagic build sequence (not the version). The fetch script picks it up via the regex `.+_\d+_artifacts\.zip`. If the Codemagic workflow renamed the artifact, update `FLUTTER_ARTIFACTS_RE` in `scripts/codemagic_fetch_artifacts.py`.
-- **System library frames stay unresolved on purpose.** Frames in `libc.so`, `libart.so`, `com.google.android.gms`, `com.google.android.webview`, `system_server`, etc. aren't from your build — those PCs match Android system binaries no Codemagic artifact ships. Don't chase them; focus on frames pointing into `split_config.<abi>.apk` for *your* package.
+- **System library frames stay unresolved on purpose.** Frames in `libc.so`, `libart.so`, `com.google.android.gms`, `com.google.android.webview`, `system_server`, etc. aren't from your build — those PCs match Android system binaries no Codemagic artifact ships. The script tags them `[SYSTEM: no BuildId …]`. Don't chase them; focus on frames pointing into `split_config.<abi>.apk` for *your* package.
+- **Flutter engine frames (`libflutter.so`) ship stripped.** The `libflutter.so` bundled in `android_native_debug_symbols.zip` carries the Build ID but no DWARF debug info, so even a correct Build-ID match resolves to no source coordinates — the script tags those `[UNRESOLVED: BuildId … matched but PC has no debug info (Flutter engine binaries ship stripped)]`. The trace's own `(flutter::Foo()+offset)` text from Play Console is already the best we get for engine frames; the skill's value-add lives in the `libapp.so` (Dart AOT) frames that resolve cleanly via the `app.android-<abi>.symbols` file.
 - **Non-Codemagic builds will fail at step 3.** If the Codemagic workflow didn't run for the version that crashed (e.g. it was a local `flutter build appbundle` upload), the API simply has nothing — bail and tell the user.
-- **The `--json` flag on `symbolize_flutter_anr.sh`** prints `{"frames", "unresolved", "abi", "output"}` to stdout with all status logs on stderr — use this when chaining the symbolizer into another script.
+- **The `--json` flag on `symbolize_flutter_anr.sh`** prints `{"frames", "resolved", "unresolved", "unresolved_nomatch", "unresolved_stripped", "system", "abi", "output"}` to stdout with all status logs on stderr — use this when chaining the symbolizer into another script. `unresolved` is the sum of `unresolved_nomatch` (BuildId not in archives → wrong build) and `unresolved_stripped` (BuildId matched but binary lacks debug info → typically `libflutter.so`).
 
 ## Quick reference
 

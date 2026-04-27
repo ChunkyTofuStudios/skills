@@ -221,8 +221,8 @@ class CacheRoundtripTests(unittest.TestCase):
         self.assertEqual(cm._load_app_cache(), {})
 
 
-class EnrichAppsTests(unittest.TestCase):
-    """Integration-ish: enrich_apps populates package via the (mocked) gh path."""
+class FindAppLazyTests(unittest.TestCase):
+    """Lazy resolution: only shells out to gh on cache miss + non-name selector."""
 
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
@@ -234,27 +234,102 @@ class EnrichAppsTests(unittest.TestCase):
     def tearDown(self) -> None:
         cm.APPS_CACHE_PATH = self._orig_path
 
-    def test_caches_null_package_when_gh_missing(self) -> None:
-        apps = [_app("a1", "Demo", "https://github.com/foo/bar")]
-        with mock.patch.object(cm.shutil, "which", return_value=None):
-            cache = cm.enrich_apps(apps)
-        self.assertIsNone(cache["a1"]["package"])
-        # Reload from disk to confirm the null was persisted.
-        self.assertIsNone(cm._load_app_cache()["a1"]["package"])
-
-    def test_does_not_re_resolve_when_cache_already_has_entry(self) -> None:
-        apps = [_app("a1", "Demo", "https://github.com/foo/bar")]
-        cm._save_app_cache({"a1": {
-            "appName": "Demo", "repo": "https://github.com/foo/bar", "package": "com.cached.pkg",
-        }})
-        # `which` may fire once for the warn-or-not check at the top of
-        # enrich_apps — that's cheap. The contract is "don't shell out to gh"
-        # when the cache already has the answer.
+    def test_name_match_does_not_touch_gh(self) -> None:
+        # Three apps with no cache, selector hits the first one by display
+        # name. The whole point of laziness: don't resolve the others.
+        apps = [
+            _app("a1", "Pixel Buddy", "https://github.com/foo/pb"),
+            _app("a2", "Beehive",     "https://github.com/foo/bh"),
+            _app("a3", "Acme",        "https://github.com/foo/ac"),
+        ]
+        cache: dict = {}
         with mock.patch.object(cm.shutil, "which", return_value="/usr/local/bin/gh"), \
-             mock.patch.object(cm.subprocess, "run") as run:
-            cache = cm.enrich_apps(apps)
-        self.assertEqual(cache["a1"]["package"], "com.cached.pkg")
-        run.assert_not_called()
+             mock.patch.object(cm, "_resolve_application_id") as resolve:
+            match = cm.find_app_lazy(apps, cache, "Pixel Buddy")
+        self.assertEqual(match["_id"], "a1")
+        resolve.assert_not_called()
+        # No app should have been added to the cache by a successful name hit.
+        self.assertEqual(cache, {})
+
+    def test_cached_package_match_does_not_touch_gh(self) -> None:
+        apps = [
+            _app("a1", "Pixel Buddy", "https://github.com/foo/pb"),
+            _app("a2", "Beehive",     "https://github.com/foo/bh"),
+        ]
+        cache = {
+            "a2": {"appName": "Beehive", "repo": None, "package": "com.example.beehive"},
+        }
+        with mock.patch.object(cm.shutil, "which", return_value="/usr/local/bin/gh"), \
+             mock.patch.object(cm, "_resolve_application_id") as resolve:
+            match = cm.find_app_lazy(apps, cache, "com.example.beehive")
+        self.assertEqual(match["_id"], "a2")
+        resolve.assert_not_called()
+
+    def test_resolves_lazily_until_first_hit(self) -> None:
+        # Three apps, none cached. Selector is a packageId that matches the
+        # second app — laziness means gh fires for a1 and a2, but never a3.
+        apps = [
+            _app("a1", "Pixel Buddy", "https://github.com/foo/pb"),
+            _app("a2", "Beehive",     "https://github.com/foo/bh"),
+            _app("a3", "Acme",        "https://github.com/foo/ac"),
+        ]
+        cache: dict = {}
+        resolved = {
+            "https://github.com/foo/pb": "com.example.pixelbuddy",
+            "https://github.com/foo/bh": "com.example.beehive",
+            "https://github.com/foo/ac": "com.example.acme",
+        }
+        with mock.patch.object(cm.shutil, "which", return_value="/usr/local/bin/gh"), \
+             mock.patch.object(cm, "_resolve_application_id",
+                               side_effect=lambda url: resolved.get(url)) as resolve:
+            match = cm.find_app_lazy(apps, cache, "com.example.beehive")
+        self.assertEqual(match["_id"], "a2")
+        # Stops at the second app, never resolves a3.
+        self.assertEqual(resolve.call_count, 2)
+        # Resolved entries should be persisted to disk.
+        on_disk = cm._load_app_cache()
+        self.assertEqual(on_disk["a1"]["package"], "com.example.pixelbuddy")
+        self.assertEqual(on_disk["a2"]["package"], "com.example.beehive")
+        self.assertNotIn("a3", on_disk)
+
+    def test_dies_clearly_when_gh_missing_and_name_misses(self) -> None:
+        apps = [_app("a1", "Pixel Buddy", "https://github.com/foo/pb")]
+        with mock.patch.object(cm.shutil, "which", return_value=None):
+            with self.assertRaises(SystemExit):
+                cm.find_app_lazy(apps, {}, "com.example.notapackage")
+
+
+class ResolveOneLazilyTests(unittest.TestCase):
+    """`_resolve_one_lazily` is idempotent and caches negative results."""
+
+    def setUp(self) -> None:
+        cm._gh_available.cache_clear()
+
+    def test_caches_null_when_gh_missing(self) -> None:
+        cache: dict = {}
+        with mock.patch.object(cm.shutil, "which", return_value=None):
+            self.assertIsNone(cm._resolve_one_lazily(cache, _app("a1", "Demo", "https://github.com/foo/bar")))
+        self.assertIn("a1", cache)
+        self.assertIsNone(cache["a1"]["package"])
+
+    def test_does_not_re_resolve_when_cache_has_entry(self) -> None:
+        cache = {"a1": {"appName": "Demo", "repo": "x", "package": "com.cached.pkg"}}
+        with mock.patch.object(cm.shutil, "which", return_value="/usr/local/bin/gh"), \
+             mock.patch.object(cm, "_resolve_application_id") as resolve:
+            pkg = cm._resolve_one_lazily(cache, _app("a1", "Demo", "https://github.com/foo/bar"))
+        self.assertEqual(pkg, "com.cached.pkg")
+        resolve.assert_not_called()
+
+    def test_caches_negative_result_to_avoid_repeat_lookups(self) -> None:
+        cache: dict = {}
+        with mock.patch.object(cm.shutil, "which", return_value="/usr/local/bin/gh"), \
+             mock.patch.object(cm, "_resolve_application_id", return_value=None) as resolve:
+            cm._resolve_one_lazily(cache, _app("a1", "Demo", "https://github.com/foo/bar"))
+            cm._resolve_one_lazily(cache, _app("a1", "Demo", "https://github.com/foo/bar"))
+        # Second call should hit the cache, not gh.
+        self.assertEqual(resolve.call_count, 1)
+        self.assertIn("a1", cache)
+        self.assertIsNone(cache["a1"]["package"])
 
 
 if __name__ == "__main__":

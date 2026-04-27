@@ -31,22 +31,56 @@ teardown() { sym_teardown; }
   grep -q 'libapp/foo.cc:42' "$out"
 }
 
-@test "frames addr2line cannot resolve are marked [UNRESOLVED]" {
+@test "frames addr2line cannot resolve are marked [UNRESOLVED:…]" {
   trace=$(stage_trace play-anr-trace.log)
   # No STUB_A2L_RESPONSES → every PC returns ?? / ??:0.
   run_sym "$trace" "$SYM_FIXTURES_DIR/symbols"
   [ "$status" -eq 0 ]
 
   out="$TEST_TMP/play-anr-trace.symbolized.txt"
-  grep -q '\[UNRESOLVED\]' "$out"
+  grep -q '\[UNRESOLVED:' "$out"
 }
 
-@test "summary reports frame counts" {
+@test "frames with no BuildId are labeled [SYSTEM]" {
   trace=$(stage_trace play-anr-trace.log)
   run_sym "$trace" "$SYM_FIXTURES_DIR/symbols"
   [ "$status" -eq 0 ]
+
+  out="$TEST_TMP/play-anr-trace.symbolized.txt"
+  # The fixture's frame #00 is `/apex/.../libc.so` with no BuildId.
+  grep -q '\[SYSTEM:' "$out"
+}
+
+@test "summary reports resolved/unresolved/system breakdown" {
+  trace=$(stage_trace play-anr-trace.log)
+  run_sym "$trace" "$SYM_FIXTURES_DIR/symbols"
+  [ "$status" -eq 0 ]
+  # Fixture has 3 native frames: 1 system + 2 with a BuildId that the default
+  # readelf stub doesn't recognize → 2 unresolved.
   [[ "$output" == *"Frames: 3"* ]]
-  [[ "$output" == *"Unresolved: 3"* ]]
+  [[ "$output" == *"Unresolved: 2"* ]]
+  [[ "$output" == *"System / external: 1"* ]]
+}
+
+@test "frames from Google system packages with BuildIds are labeled [SYSTEM]" {
+  trace=$(stage_trace play-anr-trace-system-buildid.log)
+  run_sym "$trace" "$SYM_FIXTURES_DIR/symbols"
+  [ "$status" -eq 0 ]
+
+  out="$TEST_TMP/play-anr-trace-system-buildid.symbolized.txt"
+  # Two system frames (gms + webview) — both get [SYSTEM:.
+  [ "$(grep -c '\[SYSTEM:' "$out")" -eq 2 ]
+  # The user-app frame still goes through normal BuildId handling — readelf
+  # stub gives nothing for `libapp.so` here, so it's [UNRESOLVED:.
+  [ "$(grep -c '\[UNRESOLVED:' "$out")" -eq 1 ]
+  # And critically: the system BuildIds must NOT show up in the
+  # "no matching symbol file" warning section. Frame *trace lines* go to the
+  # output file only, so $output is the SUMMARY block + log lines.
+  [[ "$output" != *"a2d39cc045dd41131e53ed60dc7ddca2"* ]]
+  [[ "$output" != *"c0d75ff5364ef82cbfefff89b96c07c57b4fdda3"* ]]
+  # The user-app BuildId (deadbeef…) is genuinely unmatched and should be
+  # listed.
+  [[ "$output" == *"deadbeefcafef00d1234567890abcdef00000001"* ]]
 }
 
 @test "--json emits a parseable summary on stdout" {
