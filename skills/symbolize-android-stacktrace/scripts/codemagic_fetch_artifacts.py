@@ -44,10 +44,18 @@ Caches:
   ~/.cache/codemagic-fetch-artifacts/codemagic/<appId>/<buildId>/
       Downloaded zip artifacts (cache hits verified by size match).
 
-Env: CODEMAGIC_API_TOKEN must be set. The `gh` CLI is optional — when
-present and authenticated, `--app` also accepts the Android applicationId
-(resolved from the repo's gradle file). Without `gh`, select apps by
-their Codemagic display name (the no-flag `apps[].appName` field).
+Auth: the Codemagic API key is resolved in this order —
+  1. CODEMAGIC_API_KEY env var.
+  2. A file named `.codemagic-api-key` found by walking up from the current
+     working directory (search stops at the directory containing `.git`,
+     so the lookup never crosses repo boundaries). Contents are the key
+     verbatim, with surrounding whitespace stripped. Plaintext on disk —
+     only check it in if the repo is private and the team accepts the risk.
+
+The `gh` CLI is optional — when present and authenticated, `--app` also
+accepts the Android applicationId (resolved from the repo's gradle file).
+Without `gh`, select apps by their Codemagic display name (the no-flag
+`apps[].appName` field).
 """
 
 from __future__ import annotations
@@ -123,11 +131,42 @@ def fmt_date(iso: str | None) -> str | None:
 # Codemagic API
 # ---------------------------------------------------------------------------
 
+API_KEY_FILENAME = ".codemagic-api-key"
+
+
+def _find_key_file(start: Path) -> Path | None:
+    """Walk up from `start` looking for `.codemagic-api-key`.
+
+    Stops at (and includes) the first directory containing `.git`, then
+    returns. This keeps the lookup scoped to a single repo, so a stray
+    key file in a parent directory can never be picked up by a sibling
+    project.
+    """
+    for d in [start, *start.parents]:
+        candidate = d / API_KEY_FILENAME
+        if candidate.is_file():
+            return candidate
+        if (d / ".git").exists():
+            return None
+    return None
+
+
+@functools.lru_cache(maxsize=1)
 def _token() -> str:
-    t = os.environ.get("CODEMAGIC_API_TOKEN")
-    if not t:
-        die("CODEMAGIC_API_TOKEN env var is not set.")
-    return t
+    env = os.environ.get("CODEMAGIC_API_KEY")
+    if env and env.strip():
+        return env.strip()
+    key_file = _find_key_file(Path.cwd().resolve())
+    if key_file:
+        contents = key_file.read_text().strip()
+        if contents:
+            return contents
+        die(f"{key_file} is empty.")
+    die(
+        "Codemagic API key not found. Set CODEMAGIC_API_KEY env var, or "
+        f"create a `{API_KEY_FILENAME}` file at the repo root containing "
+        "the key (plaintext)."
+    )
 
 
 def api_get(path: str) -> dict:

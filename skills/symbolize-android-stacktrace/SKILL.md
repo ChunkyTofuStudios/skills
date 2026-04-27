@@ -25,11 +25,11 @@ If you're unsure whether the build was from Codemagic, check `codemagic.yaml` at
 
 | Requirement | How to satisfy |
 |---|---|
-| `CODEMAGIC_API_TOKEN` env var | Generate at [Codemagic → User settings → Integrations → Personal API token](https://docs.codemagic.io/rest-api/codemagic-rest-api/). Export it before invoking the skill. |
+| Codemagic API key | Generate at [Codemagic → User settings → Integrations → Personal API token](https://docs.codemagic.io/rest-api/codemagic-rest-api/). Provide it via either: (a) `CODEMAGIC_API_KEY` env var, or (b) a `.codemagic-api-key` file at the repo root containing the key as plaintext — the script walks up from CWD and stops at the `.git` boundary. The file is convenient for teams who want a shared key checked into a private repo; accept that risk before doing it. |
 | Android NDK with `llvm-addr2line` | Default lookup: `~/Library/Android/sdk/ndk/27.3.13750724`. Override with `ANDROID_NDK_HOME=/path/to/ndk`. Any recent NDK ships `llvm-addr2line` and `llvm-readelf`. |
 | `unzip`, `python3` (3.10+), `bash` | Standard. The Python script uses stdlib only. |
 
-If `CODEMAGIC_API_TOKEN` isn't set, **stop and ask the user** rather than guessing — every Codemagic call will 401.
+If neither the env var nor the file is present, **stop and ask the user** rather than guessing — every Codemagic call will 401.
 
 There is **no other setup**. In particular, `gh` is **not** required — see [step 3](#3-fetch-symbols-from-codemagic).
 
@@ -146,7 +146,7 @@ Frames the script couldn't resolve get `[UNRESOLVED]`. The summary at the end re
 
 ```bash
 # End-to-end, when you already know the display name + version:
-export CODEMAGIC_API_TOKEN=...
+export CODEMAGIC_API_KEY=...   # or drop a `.codemagic-api-key` file at the repo root
 python3 scripts/codemagic_fetch_artifacts.py --app "Pixel Buddy" --build 1.2.3 \
   | tee /tmp/cm.json
 CACHE=$(jq -r .cacheDir /tmp/cm.json)

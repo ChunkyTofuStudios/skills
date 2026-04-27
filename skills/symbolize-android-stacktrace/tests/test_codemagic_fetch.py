@@ -11,6 +11,7 @@ Stdlib-only — no pytest, no extra deps. Run via:
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -345,6 +346,85 @@ class ResolveOneLazilyTests(unittest.TestCase):
         self.assertEqual(resolve.call_count, 1)
         self.assertIn("a1", cache)
         self.assertIsNone(cache["a1"]["package"])
+
+
+class FindKeyFileTests(unittest.TestCase):
+    """`_find_key_file` walks up from `start` until either the key file or `.git`."""
+
+    def test_finds_key_in_start_dir(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            repo = Path(td).resolve()
+            (repo / cm.API_KEY_FILENAME).write_text("k")
+            self.assertEqual(cm._find_key_file(repo), repo / cm.API_KEY_FILENAME)
+
+    def test_walks_up_through_subdirs(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            repo = Path(td).resolve()
+            (repo / ".git").mkdir()
+            (repo / cm.API_KEY_FILENAME).write_text("k")
+            sub = repo / "a" / "b"
+            sub.mkdir(parents=True)
+            self.assertEqual(cm._find_key_file(sub), repo / cm.API_KEY_FILENAME)
+
+    def test_stops_at_git_boundary_does_not_leak_across_repos(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            outer = Path(td).resolve()
+            (outer / cm.API_KEY_FILENAME).write_text("leaked")
+            inner = outer / "inner-repo"
+            inner.mkdir()
+            (inner / ".git").mkdir()
+            self.assertIsNone(cm._find_key_file(inner))
+
+    def test_returns_none_when_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            repo = Path(td).resolve()
+            (repo / ".git").mkdir()
+            self.assertIsNone(cm._find_key_file(repo))
+
+
+class TokenResolutionTests(unittest.TestCase):
+    """`_token()` resolves from env var first, then walks up for `.codemagic-api-key`."""
+
+    def setUp(self) -> None:
+        cm._token.cache_clear()
+        self._cwd = Path.cwd()
+
+    def tearDown(self) -> None:
+        cm._token.cache_clear()
+        os.chdir(self._cwd)
+
+    def test_env_var_takes_precedence_and_is_stripped(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            repo = Path(td).resolve()
+            (repo / ".git").mkdir()
+            (repo / cm.API_KEY_FILENAME).write_text("from-file")
+            os.chdir(repo)
+            with mock.patch.dict(os.environ, {"CODEMAGIC_API_KEY": "  from-env  "}, clear=False):
+                self.assertEqual(cm._token(), "from-env")
+
+    def test_falls_back_to_key_file_and_strips_trailing_newline(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            repo = Path(td).resolve()
+            (repo / ".git").mkdir()
+            (repo / cm.API_KEY_FILENAME).write_text("the-key\n")
+            sub = repo / "deeply" / "nested"
+            sub.mkdir(parents=True)
+            os.chdir(sub)
+            env = {k: v for k, v in os.environ.items() if k != "CODEMAGIC_API_KEY"}
+            with mock.patch.dict(os.environ, env, clear=True):
+                self.assertEqual(cm._token(), "the-key")
+
+    def test_dies_when_neither_present(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            repo = Path(td).resolve()
+            (repo / ".git").mkdir()
+            os.chdir(repo)
+            env = {k: v for k, v in os.environ.items() if k != "CODEMAGIC_API_KEY"}
+            with mock.patch.dict(os.environ, env, clear=True), \
+                 mock.patch.object(cm, "die", side_effect=SystemExit) as die:
+                with self.assertRaises(SystemExit):
+                    cm._token()
+                self.assertIn("not found", die.call_args.args[0])
 
 
 if __name__ == "__main__":
