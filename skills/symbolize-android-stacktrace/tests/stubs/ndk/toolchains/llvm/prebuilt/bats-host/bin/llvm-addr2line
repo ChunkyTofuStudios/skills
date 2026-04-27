@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Stub `llvm-addr2line`. Logs args to $STUB_LOG and emits canned output for
+# whichever (file, pc) pair the test set up via STUB_A2L_RESPONSES.
+#
+# STUB_A2L_RESPONSES format: newline-separated lookup table.
+# Each line: <file_basename>:<pc>=<output>
+# Within <output>, `|` is converted to a real newline (so callers can
+# express the multi-line "function name\nfile:line" reply without
+# embedding raw newlines into the env var).
+# Any pair not listed in the table emits "??\n??:0\n" so the script treats
+# it as unresolved.
+set -u
+echo "addr2line $*" >> "${STUB_LOG:-/dev/null}"
+
+file=""
+pc=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -e) file="$2"; shift 2 ;;
+    -a|-f|-C|-i) shift ;;
+    0x*) pc="$1"; shift ;;
+    *) shift ;;
+  esac
+done
+
+basename="${file##*/}"
+key="${basename}:${pc}"
+
+if [[ -n "${STUB_A2L_RESPONSES:-}" ]]; then
+  while IFS= read -r line; do
+    case "$line" in
+      "${key}="*)
+        printf '%s\n' "${line#*=}" | tr '|' '\n'
+        exit 0
+        ;;
+    esac
+  done <<< "$STUB_A2L_RESPONSES"
+fi
+
+# Default: unresolved.
+printf '??\n??:0\n'

@@ -10,6 +10,7 @@ A skill is a self-contained directory that gives an AI coding agent specialized 
 |---|---|
 | [`android-emulator`](skills/android-emulator/) | Run, debug, screenshot, and interact with a Flutter app on an Android emulator. Gives the agent eyes (screenshots, accessibility tree) and hands (tap, hold, swipe, multi-touch pinch). |
 | [`design-polish`](skills/design-polish/) | Polish Flutter UI screens for visual hierarchy, readability, and section clarity. Locks in the app's existing design tone from a reference screen first, then iterates on each target screen via the `android-emulator` skill and an independent evaluator sub-agent. |
+| [`symbolize-android-stacktrace`](skills/symbolize-android-stacktrace/) | De-obfuscate a Google Play Console crash/ANR stacktrace for a Flutter Android app whose release build came from Codemagic. Fetches the matching native + Flutter symbol artefacts and resolves every `pc 0x…` frame to file:line via `llvm-addr2line`. |
 
 More skills will land here over time.
 

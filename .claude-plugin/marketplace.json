@@ -35,6 +35,20 @@
       "author": {
         "name": "Chunky Tofu Studios"
       }
+    },
+    {
+      "name": "symbolize-android-stacktrace",
+      "description": "De-obfuscate (symbolize) an Android crash or ANR stacktrace exported from the Google Play Console for a Flutter app whose release build came from Codemagic CI/CD — fetches the matching `android_native_debug_symbols.zip` and `<AppName>_<N>_artifacts.zip` from Codemagic, then resolves every `pc 0x…` native frame and obfuscated Flutter frame to file:line via `llvm-addr2line`. Use whenever the user has a stacktrace (.txt/.log/pasted text) and wants to know which line of code crashed, even if they don't say \"symbolize\" — e.g. \"what's causing this ANR?\", \"debug this Play Console crash\", \"translate this stack\", \"resolve these pc 0x… frames\", \"Codemagic build N crashed, here's the trace\". Skips: iOS/dSYM symbolication, non-Codemagic builds (no symbol upload step), Crashlytics-only Dart exceptions with no native or Flutter frames.",
+      "source": "./",
+      "skills": ["./skills/symbolize-android-stacktrace"],
+      "license": "MIT",
+      "homepage": "https://github.com/chunkytofustudios/flutter-skills",
+      "repository": "https://github.com/chunkytofustudios/flutter-skills",
+      "category": "development",
+      "keywords": ["flutter", "android", "stacktrace", "symbolize", "anr", "crash", "codemagic", "play-console"],
+      "author": {
+        "name": "Chunky Tofu Studios"
+      }
     }
   ]
 }

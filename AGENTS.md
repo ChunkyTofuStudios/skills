@@ -39,12 +39,21 @@ metadata:
 skills-ref validate skills/<your-skill>
 ```
 
-**Unit tests & lint.** Two repo-wide gates live in [`tools/`](tools/):
+**Unit tests, lint, type check.** Three repo-wide gates live in [`tools/`](tools/):
 
 ```bash
-tools/run-tests.sh                # bats suites under skills/*/tests/
-tools/run-tests.sh skills/<name>  # scope to one skill
+tools/run-tests.sh                # bats + python unittest suites under skills/*/tests/
+tools/run-tests.sh skills/<name>  # scope to one skill (also accepts skills/<name>/tests)
 tools/lint.sh                     # shellcheck on every bundled shell script
+tools/typecheck.sh                # `ty` (Astral) on every bundled python script
 ```
 
-**If you modify any shell script under `skills/<name>/scripts/` (or `tools/`), run both before reporting the change as done.** They're fast (<3s), need no emulator or network, and catch the most common regressions. If the skill being modified has no `tests/` directory, run lint and note that unit tests are missing — adding a bats suite is a welcome contribution; see [`skills/android-emulator/tests/`](skills/android-emulator/tests/) for the layout. Both tools require `bats-core` and `shellcheck` on PATH (`brew install bats-core shellcheck` on macOS); they exit 127 with an install hint if missing.
+`run-tests.sh` discovers two test types per skill: `*.bats` files (run with `bats`) and `test_*.py` files (run with `python3 -m unittest`). Skills without a `tests/` directory are skipped — adding a suite is a welcome contribution. See [`skills/android-emulator/tests/`](skills/android-emulator/tests/) for a bats-only layout, and [`skills/symbolize-android-stacktrace/tests/`](skills/symbolize-android-stacktrace/tests/) for a mixed bats + python layout.
+
+**If you modify any shell script under `skills/<name>/scripts/` (or `tools/`), run lint and tests before reporting the change as done. If you modify any python script, also run `tools/typecheck.sh`.** All three are fast (<5s), need no emulator or network, and catch the most common regressions. Required deps:
+
+- `bats-core` + `shellcheck` (`brew install bats-core shellcheck` on macOS)
+- `python3` (3.10+) — stdlib only, no test deps
+- `ty` via `uv` (`brew install uv` on macOS); the script falls back to `uvx ty` if `ty` isn't on PATH
+
+Each tool exits 127 with a clear install hint when its dependency is missing.

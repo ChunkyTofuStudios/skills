@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Stub `llvm-readelf`. Logs args and emits a canned Build ID for `--notes`.
+#
+# STUB_READELF_BUILD_ID maps file basename → build ID, separated by =:
+#   STUB_READELF_BUILD_ID="libapp.so=deadbeef...\napp.android-arm64.symbols=cafef00d..."
+# Anything not listed prints no Build ID line (the script treats it as missing).
+set -u
+echo "readelf $*" >> "${STUB_LOG:-/dev/null}"
+
+file=""
+for arg in "$@"; do
+  case "$arg" in
+    --notes|--*) ;;
+    *) file="$arg" ;;
+  esac
+done
+
+basename="${file##*/}"
+
+if [[ -n "${STUB_READELF_BUILD_ID:-}" ]]; then
+  while IFS= read -r line; do
+    case "$line" in
+      "${basename}="*)
+        printf '    Owner                Data size 	Description\n'
+        printf '    GNU                  0x00000014	NT_GNU_BUILD_ID (unique build ID bitstring)\n'
+        printf '    Build ID: %s\n' "${line#*=}"
+        exit 0
+        ;;
+    esac
+  done <<< "$STUB_READELF_BUILD_ID"
+fi

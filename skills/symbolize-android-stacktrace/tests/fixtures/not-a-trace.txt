@@ -1,0 +1,2 @@
+This is just a plain text file with no stacktrace markers.
+No Crashlytics header. No pc 0x lines. Nothing to classify.
