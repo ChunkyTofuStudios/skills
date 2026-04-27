@@ -1,0 +1,45 @@
+// Copy to lib/preview_wrapper.dart and fill in the providers your app's root
+// widget tree actually has. The previewer requires the wrapper to be a public
+// top-level function (no closures, no private prefix) so it can be passed as
+// a const tearoff to `@Preview(wrapper: previewWrapper)`.
+//
+// Use it from any @Preview-annotated function:
+//
+//   @Preview(name: 'My widget', wrapper: previewWrapper)
+//   Widget myWidgetPreview() => const MyWidget();
+
+import 'package:flutter/material.dart';
+
+// TODO: import any additional providers your app's root widget tree needs.
+// import 'package:flutter_bloc/flutter_bloc.dart';
+// import 'package:my_app/src/theme/cubit/theme_cubit.dart';
+// import 'package:my_app/src/ux/cubit/ux_cubit.dart';
+// import 'package:my_app/gen/app_localizations.dart';
+
+/// Wraps [child] in the same global ancestors your real app provides — the
+/// minimum set so `BlocBuilder`, `Theme.of`, `MediaQuery.of`, etc. all
+/// resolve when the previewer renders the widget in isolation.
+Widget previewWrapper(Widget child) {
+  // TODO: mirror your real `app.dart` root tree here. Replace this skeleton
+  // with the providers + MaterialApp + Scaffold combination your app uses.
+  //
+  // Example for a BLoC-based theme cubit setup:
+  //
+  //   return MultiBlocProvider(
+  //     providers: [
+  //       BlocProvider<ThemeCubit>(create: (_) => ThemeCubit()),
+  //       BlocProvider<UxCubit>(create: (_) => UxCubit(deviceType: DeviceType.mobile)),
+  //     ],
+  //     child: BlocBuilder<ThemeCubit, ThemeState>(
+  //       builder: (context, theme) => MaterialApp(
+  //         theme: theme.getMaterialTheme(isTablet: false),
+  //         home: Scaffold(body: Center(child: child)),
+  //       ),
+  //     ),
+  //   );
+
+  return MaterialApp(
+    theme: ThemeData.light(useMaterial3: true),
+    home: Scaffold(body: Center(child: child)),
+  );
+}

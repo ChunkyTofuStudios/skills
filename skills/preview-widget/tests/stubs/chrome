@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Stubbed Chrome/Chromium. Logs args to $STUB_LOG and writes a 1-byte file
+# at the path passed to `--screenshot=`, simulating a successful capture.
+# Override behavior via:
+#   STUB_CHROME_FAIL=1            -> exit non-zero without writing a file
+#   STUB_CHROME_NO_OUTPUT=1       -> exit 0 but do NOT write the file
+#                                    (simulates a silent Chrome failure)
+set -u
+echo "chrome $*" >> "${STUB_LOG:-/dev/null}"
+
+if [ "${STUB_CHROME_FAIL:-0}" = "1" ]; then
+  exit 1
+fi
+
+# Pull the path out of `--screenshot=/abs/path`. The preview-widget script
+# always passes the equals form, so we don't need to handle space-separated.
+out=""
+for arg in "$@"; do
+  case "$arg" in
+    --screenshot=*) out="${arg#--screenshot=}" ;;
+  esac
+done
+
+if [ "${STUB_CHROME_NO_OUTPUT:-0}" = "1" ]; then
+  exit 0
+fi
+
+if [ -n "$out" ]; then
+  # Minimal PNG-ish payload — just enough that `[ -f "$OUT" ]` succeeds.
+  printf '\x89PNG\r\n\x1a\n' > "$out"
+fi
+
+exit 0

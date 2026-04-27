@@ -1,0 +1,42 @@
+// Copy to lib/preview_variants.dart for a reusable multi-preview annotation
+// that renders a widget in light + dark on phone, plus tablet width.
+// Apply with `@StandardPreview()` on any preview function.
+//
+// MultiPreview subclasses must:
+//   1. use the `final class` modifier,
+//   2. expose a `const` constructor,
+//   3. override `previews` as a `final List<Preview>` initialized to a const
+//      literal (so all values inside are const-evaluable),
+//   4. reference only public top-level (or static) callbacks for `wrapper:`,
+//      `theme:`, and `localizations:` parameters.
+
+import 'package:flutter/material.dart';
+import 'package:flutter/widget_previews.dart';
+
+import 'preview_wrapper.dart';
+
+final class StandardPreview extends MultiPreview {
+  const StandardPreview();
+
+  @override
+  final List<Preview> previews = const <Preview>[
+    Preview(
+      group: 'Standard',
+      name: 'Light',
+      brightness: Brightness.light,
+      wrapper: previewWrapper,
+    ),
+    Preview(
+      group: 'Standard',
+      name: 'Dark',
+      brightness: Brightness.dark,
+      wrapper: previewWrapper,
+    ),
+    Preview(
+      group: 'Standard',
+      name: 'Tablet',
+      size: Size(1024, 1366),
+      wrapper: previewWrapper,
+    ),
+  ];
+}

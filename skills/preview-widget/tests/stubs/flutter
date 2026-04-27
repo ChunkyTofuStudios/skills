@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# Stubbed `flutter`. Logs args to $STUB_LOG and emits canned output for the
+# subcommands the preview-widget scripts care about. Override behavior via:
+#   STUB_FLUTTER_VERSION=3.38.0       -> reported version (default 3.38.0)
+#   STUB_FLUTTER_VERSION_BLANK=1      -> --version returns nothing
+#   STUB_FLUTTER_URL=http://...:PORT  -> URL printed by `widget-preview start`
+#   STUB_FLUTTER_PREVIEW_FAIL=1       -> exit non-zero before printing a URL
+#   STUB_FLUTTER_PREVIEW_DELAY=N      -> sleep N seconds before printing the URL
+#   STUB_FLUTTER_PREVIEW_NO_URL=1     -> never print a URL (just hang)
+#   STUB_FLUTTER_PREVIEW_LIFETIME=N   -> stay alive N seconds after printing
+#                                        (default 600 — long-running like the
+#                                        real server). Tests teardown kills it.
+set -u
+echo "flutter $*" >> "${STUB_LOG:-/dev/null}"
+
+case "${1:-}" in
+  --version)
+    if [ "${STUB_FLUTTER_VERSION_BLANK:-0}" = "1" ]; then
+      exit 0
+    fi
+    printf 'Flutter %s • channel stable • https://github.com/flutter/flutter.git\n' \
+      "${STUB_FLUTTER_VERSION:-3.38.0}"
+    printf 'Framework • revision abcdef0\n'
+    printf 'Engine • revision 0fedcba\n'
+    printf 'Tools • Dart 3.5.0\n'
+    ;;
+  widget-preview)
+    sub="${2:-}"
+    case "$sub" in
+      start)
+        if [ "${STUB_FLUTTER_PREVIEW_FAIL:-0}" = "1" ]; then
+          printf 'Error: simulated failure\n' >&2
+          exit 1
+        fi
+
+        delay="${STUB_FLUTTER_PREVIEW_DELAY:-0}"
+        if [ "$delay" -gt 0 ]; then
+          sleep "$delay"
+        fi
+
+        if [ "${STUB_FLUTTER_PREVIEW_NO_URL:-0}" != "1" ]; then
+          printf 'Widget preview server running at %s\n' \
+            "${STUB_FLUTTER_URL:-http://localhost:51530}"
+        fi
+
+        # Mimic a long-running server. The test's pw_teardown kills us via the
+        # PID recorded in the state file.
+        sleep "${STUB_FLUTTER_PREVIEW_LIFETIME:-600}"
+        ;;
+      *)
+        printf 'unknown widget-preview subcommand: %s\n' "$sub" >&2
+        exit 64
+        ;;
+    esac
+    ;;
+  *)
+    # Unknown command — be permissive (real flutter has many subcommands).
+    exit 0
+    ;;
+esac
