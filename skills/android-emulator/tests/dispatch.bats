@@ -170,6 +170,18 @@ teardown() { emu_teardown; }
   [[ "$output" == *"flutter run attached"* ]]
 }
 
+@test "wait-run finds log via device-stable pointer written by run" {
+  # Simulate a separate `run` invocation: write a log under a different TMP_ID
+  # and point the device-stable pointer at it. wait-run must find it even
+  # though its own $LOG (based on $$) points somewhere else.
+  other_log="$TEST_TMP/android-emu-flutter-other.log"
+  echo "Flutter run key commands." > "$other_log"
+  echo "$other_log" > "$TEST_TMP/android-emu-current-emulator-5554"
+  run_emu wait-run
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"flutter run attached"* ]]
+}
+
 @test "wait-run exits 1 and prints the error line on Gradle failure" {
   printf 'building...\nGradle build failed: oh no\n' > "$TEST_TMP/android-emu-flutter-bats.log"
   run_emu wait-run
