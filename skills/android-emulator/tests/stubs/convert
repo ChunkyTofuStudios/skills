@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Stubbed `convert` (ImageMagick). Identifies as ImageMagick on --version;
+# logs args and creates the output file (last arg) on normal invocations.
+set -u
+if [ "${1:-}" = "--version" ]; then
+  echo "Version: ImageMagick 6.9.12-98 Q16 x86_64"
+  exit 0
+fi
+echo "convert $*" >> "${STUB_LOG:-/dev/null}"
+output="${*: -1}"
+: > "$output"
+exit 0

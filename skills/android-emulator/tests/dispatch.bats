@@ -132,12 +132,25 @@ teardown() { emu_teardown; }
 
 # --- screenshot --------------------------------------------------------------
 
-@test "screenshot pipes screencap into sips and prints the resized path" {
+@test "screenshot uses convert when ImageMagick is available and prints the resized path" {
+  run_emu screenshot
+  [ "$status" -eq 0 ]
+  assert_called "screencap -p"
+  assert_called "-resize 360x"
+  refute_called "sips"
+  [[ "$output" == *"$TEST_TMP/android-emu-shot-bats.jpg"* ]]
+}
+
+@test "screenshot falls back to sips when convert is not ImageMagick" {
+  local fake_bin="$TEST_TMP/fake_bin"
+  mkdir -p "$fake_bin"
+  printf '#!/usr/bin/env bash\necho "SomeOtherTool 1.0"\n' > "$fake_bin/convert"
+  chmod +x "$fake_bin/convert"
+  export PATH="$fake_bin:$PATH"
   run_emu screenshot
   [ "$status" -eq 0 ]
   assert_called "screencap -p"
   assert_called "sips --resampleWidth 360"
-  # Output is the path to the resized JPEG.
   [[ "$output" == *"$TEST_TMP/android-emu-shot-bats.jpg"* ]]
 }
 
