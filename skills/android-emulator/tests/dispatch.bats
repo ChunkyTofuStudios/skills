@@ -183,11 +183,32 @@ teardown() { emu_teardown; }
   [[ "$output" == *"flutter run attached"* ]]
 }
 
+@test "wait-run finds log via device-stable pointer written by run" {
+  # Simulate a separate `run` invocation: write a log under a different TMP_ID
+  # and point the device-stable pointer at it. wait-run must find it even
+  # though its own $LOG (based on $$) points somewhere else.
+  other_log="$TEST_TMP/android-emu-flutter-other.log"
+  echo "Flutter run key commands." > "$other_log"
+  echo "$other_log" > "$TEST_TMP/android-emu-current-emulator-5554"
+  run_emu wait-run
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"flutter run attached"* ]]
+}
+
 @test "wait-run exits 1 and prints the error line on Gradle failure" {
   printf 'building...\nGradle build failed: oh no\n' > "$TEST_TMP/android-emu-flutter-bats.log"
   run_emu wait-run
   [ "$status" -ne 0 ]
   [[ "$output" == *"Gradle build failed"* ]]
+}
+
+@test "wait-run falls back to own log when device-stable pointer is stale" {
+  # Pointer exists but points to a nonexistent file — should fall back to $LOG.
+  echo "/nonexistent/path/flutter.log" > "$TEST_TMP/android-emu-current-emulator-5554"
+  echo "Flutter run key commands." > "$TEST_TMP/android-emu-flutter-bats.log"
+  run_emu wait-run
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"flutter run attached"* ]]
 }
 
 # --- log ---------------------------------------------------------------------
@@ -236,6 +257,10 @@ teardown() { emu_teardown; }
     /bin/sleep 0.1
   done
   assert_called "flutter run -d emulator-5554"
+  # run must write the device-stable pointer so wait-run can find the log.
+  pointer="$TEST_TMP/android-emu-current-emulator-5554"
+  [ -f "$pointer" ]
+  [[ "$(cat "$pointer")" == "$TEST_TMP/android-emu-flutter-bats.log" ]]
 }
 
 # --- input validation (defence-in-depth against arithmetic injection) -------

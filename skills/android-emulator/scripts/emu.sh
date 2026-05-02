@@ -420,6 +420,9 @@ PY
     read -ra _flutter_cmd <<< "$(flutter_cmd)"
     nohup "${_flutter_cmd[@]}" run -d "$DEVICE" > "$LOG" 2>&1 &
     echo "$!" > "$LOG_PID"
+    # Write a device-stable pointer so wait-run can locate this log
+    # even when called as a separate invocation with a different $$.
+    echo "$LOG" > "$BASE_TMP/android-emu-current-$DEVICE"
     echo "flutter run started (pid $!), log: $LOG"
     echo "tail with: scripts/emu.sh wait-run"
     ;;
@@ -427,13 +430,17 @@ PY
   wait-run)
     # Block until flutter reports the app is attached, or a build failure lands.
     # Exit 0 on success, 1 on failure/timeout.
+    # Prefer the device-stable pointer written by `run` so this works even when
+    # called as a separate invocation with a different $$ (and thus $LOG).
+    _wait_log=$(cat "$BASE_TMP/android-emu-current-$DEVICE" 2>/dev/null || true)
+    [ -n "$_wait_log" ] && [ -f "$_wait_log" ] || _wait_log="$LOG"
     deadline=$(( $(date +%s) + ${ANDROID_EMU_WAIT_SECS:-180} ))
-    until grep -qE "Flutter run key commands|Error|FAILURE|Gradle build failed" "$LOG" 2>/dev/null; do
+    until grep -qE "Flutter run key commands|Error|FAILURE|Gradle build failed" "$_wait_log" 2>/dev/null; do
       [ "$(date +%s)" -ge "$deadline" ] && { echo "timeout waiting for flutter run" >&2; exit 1; }
       sleep 1
     done
-    if grep -qE "Error|FAILURE|Gradle build failed" "$LOG"; then
-      grep -E "Error|FAILURE|Gradle build failed" "$LOG" | head -5 >&2
+    if grep -qE "Error|FAILURE|Gradle build failed" "$_wait_log" 2>/dev/null; then
+      grep -m 5 -E "Error|FAILURE|Gradle build failed" "$_wait_log" >&2 || true
       exit 1
     fi
     echo "flutter run attached"
