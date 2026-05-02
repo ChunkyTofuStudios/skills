@@ -189,6 +189,15 @@ teardown() { emu_teardown; }
   [[ "$output" == *"Gradle build failed"* ]]
 }
 
+@test "wait-run falls back to own log when device-stable pointer is stale" {
+  # Pointer exists but points to a nonexistent file — should fall back to $LOG.
+  echo "/nonexistent/path/flutter.log" > "$TEST_TMP/android-emu-current-emulator-5554"
+  echo "Flutter run key commands." > "$TEST_TMP/android-emu-flutter-bats.log"
+  run_emu wait-run
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"flutter run attached"* ]]
+}
+
 # --- log ---------------------------------------------------------------------
 
 @test "log tails the flutter daemon log with a default of 50 lines" {

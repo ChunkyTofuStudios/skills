@@ -413,7 +413,7 @@ PY
     read -ra _flutter_cmd <<< "$(flutter_cmd)"
     nohup "${_flutter_cmd[@]}" run -d "$DEVICE" > "$LOG" 2>&1 &
     echo "$!" > "$LOG_PID"
-    # Write a device-stable pointer so wait-run/kill-run can locate this log
+    # Write a device-stable pointer so wait-run can locate this log
     # even when called as a separate invocation with a different $$.
     echo "$LOG" > "$BASE_TMP/android-emu-current-$DEVICE"
     echo "flutter run started (pid $!), log: $LOG"
@@ -426,7 +426,7 @@ PY
     # Prefer the device-stable pointer written by `run` so this works even when
     # called as a separate invocation with a different $$ (and thus $LOG).
     _wait_log=$(cat "$BASE_TMP/android-emu-current-$DEVICE" 2>/dev/null || true)
-    [ -n "$_wait_log" ] || _wait_log="$LOG"
+    [ -n "$_wait_log" ] && [ -f "$_wait_log" ] || _wait_log="$LOG"
     deadline=$(( $(date +%s) + ${ANDROID_EMU_WAIT_SECS:-180} ))
     until grep -qE "Flutter run key commands|Error|FAILURE|Gradle build failed" "$_wait_log" 2>/dev/null; do
       [ "$(date +%s)" -ge "$deadline" ] && { echo "timeout waiting for flutter run" >&2; exit 1; }
